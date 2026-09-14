@@ -29,7 +29,7 @@ function register() {
 	return captured.tools.get("ask_user_question")!;
 }
 
-function driveCustom(script: (c: RenderableComponent, done: (v: unknown) => void) => void) {
+function driveCustom(script: (c: RenderableComponent, done: (v: unknown) => void) => void, rows = 24) {
 	const requestRender = vi.fn();
 	const custom = vi.fn((factory: unknown) => {
 		return new Promise((resolve) => {
@@ -39,12 +39,7 @@ function driveCustom(script: (c: RenderableComponent, done: (v: unknown) => void
 				kb: undefined,
 				done: (v: unknown) => void,
 			) => RenderableComponent;
-			const component = f(
-				{ requestRender, terminal: { columns: 120, rows: 24 } },
-				identityTheme,
-				undefined,
-				resolve,
-			);
+			const component = f({ requestRender, terminal: { columns: 120, rows } }, identityTheme, undefined, resolve);
 			script(component, resolve);
 		});
 	});
@@ -313,20 +308,84 @@ describe("ask_user_question — 'Type something.' free-text flow", () => {
 	});
 });
 
-describe("ask_user_question — tab-switch height stability", () => {
-	it("dialog total line count is identical across tab switches (mixed single+multi fixture)", async () => {
+describe("ask_user_question — dialog height", () => {
+	it("row count is stable while navigating options inside one question", async () => {
+		const tall = Array.from({ length: 12 }, (_, i) => `preview line ${i + 1}`).join("\n");
+		const params = {
+			questions: [
+				{
+					question: "Pick one",
+					header: "Choice",
+					options: [
+						{ label: "Plain", description: "no preview" },
+						{ label: "Tall", description: "previewed", preview: tall },
+					],
+				},
+			],
+		};
 		const tool = register();
-		let lengthTab0 = 0;
-		let lengthTab1 = 0;
+		let onPlain = 0;
+		let onTall = 0;
 		const { custom } = driveCustom((c, done) => {
-			lengthTab0 = c.render(120).length;
-			c.handleInput(KEY.TAB); // Tab → next question tab
-			lengthTab1 = c.render(120).length;
+			onPlain = c.render(120).length;
+			c.handleInput(KEY.DOWN); // → the previewed option
+			onTall = c.render(120).length;
+			done({ answers: [], cancelled: true });
+		}, 40);
+		const ctx = { hasUI: true, ui: { custom } } as never;
+		await tool.execute?.("tc", params as never, undefined as never, undefined as never, ctx);
+		expect(onTall).toBe(onPlain);
+	});
+});
+
+describe("ask_user_question — inline dock rendering", () => {
+	it("mounts inline with no overlay options, so pi shrinks the transcript instead of covering it", async () => {
+		const tool = register();
+		const { custom } = driveCustom((_c, done) => {
 			done({ answers: [], cancelled: true });
 		});
 		const ctx = { hasUI: true, ui: { custom } } as never;
-		await tool.execute?.("tc", mixedParams as never, undefined as never, undefined as never, ctx);
-		expect(lengthTab0).toBe(lengthTab1);
+		await tool.execute?.("tc", threeOptionParams as never, undefined as never, undefined as never, ctx);
+		// One argument only: `custom(factory)`. Passing `{ overlay: true }` would paint the
+		// dialog over the last screenful of transcript, hiding the text the question refers to.
+		expect(custom.mock.calls[0]).toHaveLength(1);
+	});
+
+	it("pads to the active tab's tallest body only — a short question carries no dead space for a taller tab", async () => {
+		// Q1 is a plain 2-option question; Q2 is a taller question (5 options + preview). The
+		// dialog pads to the ACTIVE tab's worst-case body, so Q1 renders short instead of
+		// reserving blank rows for Q2, and arrowing within a tab keeps the row count stable.
+		const tall = Array.from({ length: 12 }, (_, i) => `preview line ${i + 1}`).join("\n");
+		const params = {
+			questions: [
+				{ question: "Q1", header: "H1", options: [{ label: "A" }, { label: "B" }] },
+				{
+					question: "Q2",
+					header: "H2",
+					options: [
+						{ label: "C", description: "plain" },
+						{ label: "D", description: "previewed", preview: tall },
+					],
+				},
+			],
+		};
+		const tool = register();
+		let shortTab = 0;
+		let tallTab = 0;
+		let afterDown = 0;
+		const { custom } = driveCustom((c, done) => {
+			shortTab = c.render(120).length;
+			c.handleInput(KEY.TAB); // → Q2 (the taller tab)
+			tallTab = c.render(120).length;
+			c.handleInput(KEY.DOWN); // → the previewed option
+			afterDown = c.render(120).length;
+			done({ answers: [], cancelled: true });
+		}, 40);
+		const ctx = { hasUI: true, ui: { custom } } as never;
+		await tool.execute?.("tc", params as never, undefined as never, undefined as never, ctx);
+
+		expect(shortTab).toBeLessThan(tallTab); // no cross-tab equalization
+		expect(afterDown).toBe(tallTab); // stable while navigating one tab
 	});
 });
 

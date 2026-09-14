@@ -1,5 +1,4 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { matchesKey } from "@earendil-works/pi-tui";
 import { loadConfig, resolveCollapseKey, validateGuidanceFields } from "./config.js";
 import { ASK_USER_PROMPT_EVENT, type AskUserPromptEventPayload } from "./events.js";
 // Static import is fine — rpc-fallback pulls only types + the i18n bridge,
@@ -179,84 +178,36 @@ Preview content is rendered as markdown in a monospace box. Multi-line text with
 			// sentinel value `"off"` to disable the shortcut entirely.
 			const collapseKey = resolveCollapseKey(loadConfig());
 
-			// Capture the overlay handle so the session can call `setHidden()` when the
-			// user toggles collapse, and register a raw terminal input listener for the
-			// same key so the toggle still works while the overlay is hidden (pi-tui does
-			// not route input to a hidden overlay's `component.handleInput`).
-			const sessionRef: {
-				current: import("./state/questionnaire-session.js").QuestionnaireSession | null;
-			} = { current: null };
-			const overlayHandleRef: { current: import("@earendil-works/pi-tui").OverlayHandle | undefined } = {
-				current: undefined,
-			};
-			let hasAnnouncedHide = false;
-			let removeOverlayInputListener: (() => void) | undefined;
-
-			if (collapseKey !== "off" && typeof ctx.ui.onTerminalInput === "function") {
-				removeOverlayInputListener = ctx.ui.onTerminalInput((data) => {
-					const handle = overlayHandleRef.current;
-					if (!handle) return undefined;
-					// Only act while the questionnaire is hidden (its handleInput is
-					// unreachable) or actually focused. When some other overlay is on
-					// top (e.g. `/btw`), leave the keystroke to that overlay instead of
-					// toggling the questionnaire from underneath it.
-					if (!handle.isHidden() && !handle.isFocused()) return undefined;
-					if (!matchesKey(data, collapseKey as Parameters<typeof matchesKey>[1])) return undefined;
-					sessionRef.current?.toggleCollapsedExternal();
-					if (handle.isHidden() && !hasAnnouncedHide) {
-						hasAnnouncedHide = true;
-						ctx.ui.notify?.(`ask_user_question hidden — press ${collapseKey} to reopen`, "info");
-					}
-					return { consume: true };
+			// Inline (non-overlay) rendering: pi mounts the returned component in the
+			// input dock, so it shrinks the transcript above the questionnaire instead of
+			// painting the dialog over the last screenful. The message that explains the
+			// question stays readable while the user reads and answers it.
+			const result = await ctx.ui.custom<QuestionnaireResult>((tui, theme, _kb, done) => {
+				const session = new QuestionnaireSession({
+					tui,
+					theme,
+					params: typed,
+					itemsByTab,
+					done,
+					collapseKey,
 				});
-			}
+				return session.component;
+			});
 
-			try {
-				const result = await ctx.ui.custom<QuestionnaireResult>(
-					(tui, theme, _kb, done) => {
-						const session = new QuestionnaireSession({
-							tui,
-							theme,
-							params: typed,
-							itemsByTab,
-							done,
-							collapseKey,
-						});
-						sessionRef.current = session;
-						return session.component;
-					},
-					{
-						overlay: true,
-						overlayOptions: {
-							anchor: "bottom-center",
-							width: "100%",
-							maxHeight: "100%",
-							margin: { left: 0, right: 0, bottom: 0 },
-						},
-						onHandle: (handle) => {
-							overlayHandleRef.current = handle;
-							sessionRef.current?.setOverlayHandle(handle);
-						},
-					},
-				);
-
-				// A TUI questionnaire ALWAYS resolves a QuestionnaireResult (cancel
-				// included — state-reducer emits `{ answers, cancelled }`), so
-				// `undefined` uniquely means "host cannot render", never "user
-				// declined". RPC builds that predate ctx.mode land here: run the
-				// dialog walker when the host has the primitives; otherwise tell the
-				// model the user never saw the questions.
-				if (result === undefined) {
-					if (hasDialogUI(ctx.ui)) {
-						return buildQuestionnaireResponse(await runRpcQuestionnaire(ctx.ui, typed), typed);
-					}
-					return buildToolResult(ERROR_NO_CUSTOM_UI, { answers: [], cancelled: true, error: "no_custom_ui" });
+			// A TUI questionnaire ALWAYS resolves a QuestionnaireResult (cancel
+			// included — state-reducer emits `{ answers, cancelled }`), so
+			// `undefined` uniquely means "host cannot render", never "user
+			// declined". RPC builds that predate ctx.mode land here: run the
+			// dialog walker when the host has the primitives; otherwise tell the
+			// model the user never saw the questions.
+			if (result === undefined) {
+				if (hasDialogUI(ctx.ui)) {
+					return buildQuestionnaireResponse(await runRpcQuestionnaire(ctx.ui, typed), typed);
 				}
-
-				return buildQuestionnaireResponse(result, typed);
-			} finally {
-				removeOverlayInputListener?.();
+				return buildToolResult(ERROR_NO_CUSTOM_UI, { answers: [], cancelled: true, error: "no_custom_ui" });
 			}
+
+			return buildQuestionnaireResponse(result, typed);
 		},
 	});
 

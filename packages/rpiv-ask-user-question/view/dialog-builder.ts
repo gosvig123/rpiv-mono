@@ -54,11 +54,16 @@ export interface DialogConfig {
 	tabsByIndex: ReadonlyArray<TabComponents>;
 	/** Optional so single-question mode and non-submit tests can omit it; SubmitTabStrategy falls back to Spacer rows. */
 	submitPicker?: Component;
-	/** Worst-case body height across all tabs/options. Determines the stable overall dialog footprint. */
+	/** Worst-case body height of the ACTIVE tab (across its options). Determines the stable overall dialog footprint while navigating that tab. */
 	getBodyHeight: (width: number) => number;
 	/** Body height of the CURRENTLY active tab/option. The chrome subtracts this from `getBodyHeight` to absorb the residual OUTSIDE the bordered region. */
 	getCurrentBodyHeight: (width: number) => number;
-	/** Terminal height getter. Mirrors `getTerminalWidth` — reads `tui.terminal.rows` at render time. */
+	/**
+	 * Rows the dialog may claim, read at render time. Mirrors `getTerminalWidth` — reads
+	 * `tui.terminal.rows`. Hosts that mount the dialog in a smaller box (pi's input dock
+	 * shares the screen with the transcript and footer; rpiv-pi hands over an exact band)
+	 * report that box's height here.
+	 */
 	getTerminalRows: () => number;
 }
 
@@ -128,7 +133,11 @@ export class DialogView implements StatefulView<DialogProps> {
 		const bottomFixed = 1 + strategy.footerRowCount;
 		const middleRows = natural.length - topFixed - bottomFixed;
 
-		// Residual spacer: equalizes total height across tabs (only needed when no overflow).
+		// Residual spacer: pads the active tab's shorter options up to the body height the tab
+		// asked for (`getBodyHeight` = that tab's worst case), so navigating one question never
+		// resizes the dialog. No padding for OTHER tabs' taller bodies: that produced blank rows
+		// under every question that was shorter than the tallest one. The Submit tab's extra
+		// footer rows are still equalized (hence `maxFooterRowCount`).
 		const spacerRows = Math.max(
 			0,
 			this.config.getBodyHeight(width) +
@@ -143,6 +152,11 @@ export class DialogView implements StatefulView<DialogProps> {
 			// No overflow — add residual spacer rows after footer.
 			return spacerRows > 0 ? [...natural, ...Array<string>(spacerRows).fill("")] : natural;
 		}
+
+		// The residual pad is cosmetic. When only the pad overshoots, drop it rather than
+		// switching to the scroll path: padding must never cost the user visible rows (a host
+		// that hands over an exactly-sized box would otherwise lose body content to blanks).
+		if (natural.length <= termRows) return natural;
 
 		// OVERFLOW — apply 3-region partition with scroll-to-focus.
 		const availableMiddle = Math.max(0, termRows - topFixed - bottomFixed);

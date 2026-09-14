@@ -1,5 +1,5 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { getKeybindings, type Input, type OverlayHandle } from "@earendil-works/pi-tui";
+import { getKeybindings, type Input } from "@earendil-works/pi-tui";
 import type { QuestionData, QuestionnaireResult, QuestionParams } from "../tool/types.js";
 import type { WrappingSelectItem } from "../view/components/wrapping-select.js";
 import { COLLAPSED_HINT } from "../view/dialog-builder.js";
@@ -65,13 +65,6 @@ export class QuestionnaireSession {
 	private readonly viewAdapter: QuestionnairePropsAdapter;
 	private readonly collapseKey: string;
 
-	/**
-	 * Overlay handle captured by `ctx.ui.custom`'s `onHandle` callback. Lets the session
-	 * call `setHidden(true/false)` so pi-tui's overlay stack reflects the collapsed state
-	 * and overlay-aware consumers (e.g. `pi-station`) can resume normal behaviour.
-	 */
-	private overlayHandle: OverlayHandle | undefined;
-
 	private readonly tui: QuestionnaireSessionConfig["tui"];
 	private readonly done: QuestionnaireSessionConfig["done"];
 	readonly component: QuestionnaireSessionComponent;
@@ -101,11 +94,9 @@ export class QuestionnaireSession {
 		this.viewAdapter = built.adapter;
 
 		const theme = config.theme;
-		// Collapsed render: a single dim row at the bottom of the overlay. pi-tui sizes
-		// the overlay to `min(lines.length, maxHeight)`, so returning one line shrinks
-		// the bottom-anchored overlay from full-height to one row and the transcript
-		// behind it becomes readable (#47). The overlay stays focused and in the
-		// stack, so Ctrl+] still routes here to expand.
+		// Collapsed render: a single dim row. The dialog renders inline in pi's input
+		// dock, so shrinking it to one row hands its rows back to the transcript above
+		// (#47). The component keeps keyboard focus, so Ctrl+] still routes here to expand.
 		const collapsedRender = (_width: number): string[] => [
 			theme.fg("dim", ` ${t("hint.expand_line", COLLAPSED_HINT)} `),
 		];
@@ -159,11 +150,6 @@ export class QuestionnaireSession {
 			case "forward_notes_keystroke":
 				this.notesInput.handleInput(effect.data);
 				return;
-			case "set_overlay_hidden":
-				// No-op until `setOverlayHandle` has been called (the handle arrives via
-				// `ctx.ui.custom`'s `onHandle` right after the overlay is shown).
-				this.overlayHandle?.setHidden(effect.hidden);
-				return;
 			case "done":
 				this.done(effect.result);
 				return;
@@ -211,26 +197,5 @@ export class QuestionnaireSession {
 	private currentItem(): WrappingSelectItem | undefined {
 		const arr = this.itemsByTab[this.state.currentTab] ?? [];
 		return this.state.optionIndex < arr.length ? arr[this.state.optionIndex] : undefined;
-	}
-
-	/**
-	 * Setter for the overlay handle, called by `ctx.ui.custom`'s `onHandle` callback once
-	 * the TUI has created the overlay. Until this is called, `set_overlay_hidden` effects
-	 * are no-ops — the session still tracks `state.collapsed` for the view layer.
-	 */
-	setOverlayHandle(handle: OverlayHandle): void {
-		this.overlayHandle = handle;
-	}
-
-	/**
-	 * Public toggle used by the raw terminal input listener registered in `execute()`.
-	 * pi-tui does not route input to a hidden overlay's `component.handleInput`, so the
-	 * raw listener (which fires for terminal data regardless of overlay visibility)
-	 * reaches the session through this method instead of the dispatch path. Routed
-	 * through `commit` so the transition stays in the reducer and the overlay hide
-	 * happens via the `set_overlay_hidden` effect like every other side effect.
-	 */
-	toggleCollapsedExternal(): void {
-		this.commit({ kind: "toggle_collapsed" });
 	}
 }

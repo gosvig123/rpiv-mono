@@ -51,7 +51,12 @@ export interface QuestionnaireBuilt {
 }
 
 interface HeightComputers {
-	global: (width: number) => number;
+	/**
+	 * Worst-case body height across the ACTIVE tab's options. Drives the dialog's residual
+	 * pad: matching it keeps the footprint stable while arrowing through one question,
+	 * without reserving blank rows for another tab's taller body.
+	 */
+	activeTabMax: (width: number) => number;
 	current: (width: number) => number;
 }
 
@@ -197,19 +202,15 @@ class QuestionnaireBuilder {
 	}
 
 	private buildHeightComputers(tabs: ReadonlyArray<TabComponents>): HeightComputers {
-		const global = (width: number): number => {
-			let max = 0;
-			for (const tab of tabs) {
-				const h = tab.bodyHeights(width).max;
-				if (h > max) max = h;
-			}
-			return Math.max(1, max);
+		const activeTabMax = (width: number): number => {
+			const idx = Math.min(this.getCurrentTab(), tabs.length - 1);
+			return Math.max(1, tabs[idx]?.bodyHeights(width).max ?? 1);
 		};
 		const current = (width: number): number => {
 			const idx = Math.min(this.getCurrentTab(), tabs.length - 1);
 			return Math.max(0, tabs[idx]?.bodyHeights(width).current ?? 0);
 		};
-		return { global, current };
+		return { activeTabMax, current };
 	}
 
 	private pickInitialActivePreview(tabs: ReadonlyArray<TabComponents>): StatefulView<PreviewPaneProps> {
@@ -232,7 +233,7 @@ class QuestionnaireBuilder {
 				isMulti: this.isMulti,
 				tabsByIndex: tabs,
 				submitPicker,
-				getBodyHeight: heights.global,
+				getBodyHeight: heights.activeTabMax,
 				getCurrentBodyHeight: heights.current,
 				getTerminalRows: this.getTerminalRows,
 			},
