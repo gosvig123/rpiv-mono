@@ -8,7 +8,7 @@
   </a>
 </div>
 
-Let the model ask you structured clarifying questions instead of guessing. `rpiv-ask-user-question` adds the `ask_user_question` tool to [Pi Agent](https://github.com/badlogic/pi-mono) - a tabbed dialog with single- and multi-select questions, side-by-side previews, per-option notes, and a Submit tab that reviews answers before they go back to the model.
+Let the model ask you structured clarifying questions instead of guessing. `rpiv-ask-user-question` adds the `ask_user_question` tool to [Pi Agent](https://github.com/badlogic/pi-mono) - a tabbed dialog with single- and multi-select questions, side-by-side previews, per-option notes, and immediate submission after the final answer.
 
 ![Side-by-side code preview](https://raw.githubusercontent.com/juicesharp/rpiv-mono/main/packages/rpiv-ask-user-question/docs/code-preview.jpg)
 
@@ -18,7 +18,7 @@ Let the model ask you structured clarifying questions instead of guessing. `rpiv
 - **Preview pane** - render an ASCII diagram, code snippet, or markdown next to each option, side-by-side or stacked depending on terminal width.
 - **Per-option notes** - press `n` on a previewed option to attach a free-text note that travels back with the answer.
 - **Multi-select questions** - checkboxes with `Space` to toggle, Enter-as-toggle on rows, a `Next` sentinel to advance, and toggles persisted across tab switches.
-- **Submit tab** - review every answer before submitting; warns about unanswered questions and offers a Submit picker.
+- **Optional Submit tab** - use `Tab` to review or submit partial answers before reaching the final question; selecting the final answer submits immediately.
 - **Chat row on every tab** - redirect the conversation without leaving the dialog.
 - **Inline dialog** - the questionnaire docks above the input instead of covering the transcript, so the message that prompted the question stays readable while you answer.
 - **Terminal-row-aware overflow scroll** - when the dialog is taller than the terminal, the body scrolls between a sticky heading and sticky hints/border; overflow indicators (↑ / ↓ / ↕) show what's clipped.

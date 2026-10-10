@@ -502,8 +502,7 @@ describe("ask_user_question — multi-select toggle persistence (regression)", (
 			c.handleInput(KEY.DOWN); // → BE
 			c.handleInput(KEY.SPACE); // toggle BE ON
 			c.handleInput(KEY.TAB); // → Q2 WITHOUT pressing Enter on Next
-			c.handleInput(KEY.ENTER); // Q2: pick A → Submit tab
-			c.handleInput(KEY.ENTER); // Submit
+			c.handleInput(KEY.ENTER); // Q2: pick A → submit immediately
 		});
 		const ctx = { hasUI: true, ui: { custom } } as never;
 		const r = (await tool.execute?.("tc", persistParams as never, undefined as never, undefined as never, ctx)) as
@@ -529,8 +528,7 @@ describe("ask_user_question — multi-select toggle persistence (regression)", (
 			c.handleInput(KEY.DOWN); // → "Type something." row
 			c.handleInput(KEY.DOWN); // → Next
 			c.handleInput(KEY.ENTER); // commit (auto-advance to Q2)
-			c.handleInput(KEY.ENTER); // Q2: A → Submit
-			c.handleInput(KEY.ENTER); // Submit
+			c.handleInput(KEY.ENTER); // Q2: A → submit immediately
 		});
 		const ctx = { hasUI: true, ui: { custom } } as never;
 		const r = (await tool.execute?.("tc", persistParams as never, undefined as never, undefined as never, ctx)) as
@@ -550,12 +548,11 @@ describe("ask_user_question — multi-question tab cycling flow", () => {
 		],
 	};
 
-	it("answer Q1 → auto-advance to Q2 → answer Q2 → auto-advance to Submit", async () => {
+	it("answer Q1 → auto-advance to Q2 → answer Q2 → submit immediately", async () => {
 		const tool = register();
 		const { custom } = driveCustom((c) => {
 			c.handleInput(KEY.ENTER); // Q1: select A → auto-advance to Q2
-			c.handleInput(KEY.ENTER); // Q2: select X → auto-advance to Submit
-			c.handleInput(KEY.ENTER); // Submit (all answered)
+			c.handleInput(KEY.ENTER); // Q2: select X → submit immediately
 		});
 		const ctx = { hasUI: true, ui: { custom } } as never;
 		const r = (await tool.execute?.("tc", twoParams as never, undefined as never, undefined as never, ctx)) as
@@ -621,11 +618,11 @@ describe("ask_user_question — multi-question tab cycling flow", () => {
 		expect(r?.details.answers[0].question).toBe("Q1?");
 	});
 
-	it("answer all → Submit tab → DOWN → Enter on Cancel returns cancelled=true with all answers preserved", async () => {
+	it("Submit tab → DOWN → Enter on Cancel returns cancelled=true with partial answers preserved", async () => {
 		const tool = register();
 		const { custom } = driveCustom((c) => {
 			c.handleInput(KEY.ENTER); // Q1: select A → auto-advance to Q2
-			c.handleInput(KEY.ENTER); // Q2: select X → auto-advance to Submit
+			c.handleInput(KEY.TAB); // → Submit (Q2 unanswered)
 			c.handleInput(KEY.DOWN); // submit_nav → submitChoiceIndex=1 (Cancel row)
 			c.handleInput(KEY.ENTER); // Enter on Cancel
 		});
@@ -634,9 +631,8 @@ describe("ask_user_question — multi-question tab cycling flow", () => {
 			| ToolResult
 			| undefined;
 		expect(r?.details.cancelled).toBe(true);
-		expect(r?.details.answers).toHaveLength(2);
+		expect(r?.details.answers).toHaveLength(1);
 		expect(r?.details.answers[0].answer).toBe("A");
-		expect(r?.details.answers[1].answer).toBe("X");
 	});
 
 	// Confirmed-row indicator: tab back to a previously-answered single-select tab and the
@@ -761,14 +757,13 @@ describe("ask_user_question — MAX_QUESTIONS (4 questions) complete flow", () =
 		],
 	};
 
-	it("answer all 4 questions with auto-advance, then submit", async () => {
+	it("answer all 4 questions with auto-advance, then submit immediately", async () => {
 		const tool = register();
 		const { custom } = driveCustom((c) => {
 			c.handleInput(KEY.ENTER); // Q1 → Q2
 			c.handleInput(KEY.ENTER); // Q2 → Q3
 			c.handleInput(KEY.ENTER); // Q3 → Q4
-			c.handleInput(KEY.ENTER); // Q4 → Submit tab
-			c.handleInput(KEY.ENTER); // Submit
+			c.handleInput(KEY.ENTER); // Q4 → submit immediately
 		});
 		const ctx = { hasUI: true, ui: { custom } } as never;
 		const r = (await tool.execute?.("tc", fourParams as never, undefined as never, undefined as never, ctx)) as
@@ -814,8 +809,7 @@ describe("ask_user_question — mixed single+multi question flow", () => {
 			c.handleInput(KEY.DOWN); // → Ops (4)
 			c.handleInput(KEY.DOWN); // → "Type something." row (5)
 			c.handleInput(KEY.DOWN); // → Next sentinel (6)
-			c.handleInput(KEY.ENTER); // commit multi-select → Submit tab
-			c.handleInput(KEY.ENTER); // Submit (all answered)
+			c.handleInput(KEY.ENTER); // commit multi-select → submit immediately
 		});
 		const ctx = { hasUI: true, ui: { custom } } as never;
 		const r = (await tool.execute?.("tc", mixedParams as never, undefined as never, undefined as never, ctx)) as

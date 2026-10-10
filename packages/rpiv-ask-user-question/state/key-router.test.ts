@@ -181,9 +181,12 @@ describe("routeKey — confirm (single-select)", () => {
 		});
 	});
 
-	it("last question -> autoAdvanceTab points at the Submit tab (questions.length)", () => {
+	it("last question -> autoAdvanceTab is undefined (dialog submits without a confirmation step)", () => {
 		const action = routeKey(sentinel(KEY.CONFIRM), makeState({ currentTab: 1 }), makeRuntime());
-		expect(action).toMatchObject({ kind: "confirm", autoAdvanceTab: 2 });
+		expect(action).toMatchObject({ kind: "confirm" });
+		if (action.kind === "confirm") {
+			expect(action.autoAdvanceTab).toBeUndefined();
+		}
 	});
 
 	it("single-question (!isMulti) -> autoAdvanceTab is undefined (dialog submits)", () => {
@@ -360,8 +363,8 @@ describe("routeKey — multiSelect", () => {
 		if (action.kind === "multi_confirm") expect(action.autoAdvanceTab).toBe(1);
 	});
 
-	// Spec: Enter on Next from the LAST multi-select question advances to the Submit tab.
-	it("multi-question multi-select on last tab: Enter on Next carries autoAdvanceTab=questions.length (Submit)", () => {
+	// Enter on Next from the last multi-select question submits without another confirmation.
+	it("multi-question multi-select on last tab: Enter on Next leaves autoAdvanceTab undefined", () => {
 		const action = routeKey(
 			sentinel(KEY.CONFIRM),
 			makeState({ currentTab: 1, optionIndex: 3, multiSelectChecked: new Set([0]) }),
@@ -378,7 +381,7 @@ describe("routeKey — multiSelect", () => {
 			}),
 		);
 		expect(action.kind).toBe("multi_confirm");
-		if (action.kind === "multi_confirm") expect(action.autoAdvanceTab).toBe(2);
+		if (action.kind === "multi_confirm") expect(action.autoAdvanceTab).toBeUndefined();
 	});
 
 	it("Space does NOT emit toggle on a single-select question", () => {

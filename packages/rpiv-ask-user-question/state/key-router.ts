@@ -49,9 +49,8 @@ function totalTabs(runtime: QuestionnaireRuntime): number {
 }
 
 function computeAutoAdvanceTab(state: QuestionnaireState, runtime: QuestionnaireRuntime): number | undefined {
-	if (!runtime.isMulti) return undefined;
-	if (state.currentTab < runtime.questions.length - 1) return state.currentTab + 1;
-	return runtime.questions.length;
+	if (!runtime.isMulti || state.currentTab >= runtime.questions.length - 1) return undefined;
+	return state.currentTab + 1;
 }
 
 function buildSingleSelectAnswer(state: QuestionnaireState, runtime: QuestionnaireRuntime): QuestionAnswer | null {
